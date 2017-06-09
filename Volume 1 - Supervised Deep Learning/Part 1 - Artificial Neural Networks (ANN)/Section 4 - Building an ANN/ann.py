@@ -48,16 +48,17 @@ X_test = sc.transform(X_test)
 import keras
 from keras.models import Sequential
 from keras.layers import Dense
-
+from keras.layers import Dropout
 ## Initialising the ANN
 classifier = Sequential()
 
 # Adding the input layer and the first hidden layer(activation function)
 classifier.add(Dense(units = 6, kernel_initializer = 'uniform', activation = 'relu', input_dim = 11))
-
+# with drop out
+classifier.add(Dropout(rate = 0.1))
 # Adding the second hidden layer
 classifier.add(Dense(units = 6, kernel_initializer = 'uniform', activation = 'relu'))
-
+classifier.add(Dropout(rate = 0.1))
 # Adding the output layer
 classifier.add(Dense(units = 1, kernel_initializer = 'uniform', activation = 'sigmoid'))
 # in case if there are more dependent variables which has more than two categories
@@ -111,6 +112,7 @@ from keras.wrappers.scikit_learn import KerasClassifier
 from sklearn.model_selection import cross_val_score
 from keras.models import Sequential
 from keras.layers import Dense
+
 # keras classifier expect a function as one of its first argument i.e build_fn. So we create a function below, which should include
 # the steps to build the ANN as done above. So just copy the lines except fit/training line"""
 # local classifier
@@ -125,9 +127,49 @@ def build_classifier():
 # which also accepts batch_size and epochs as taken in fit function above
 classifier = KerasClassifier(build_fn = build_classifier, batch_size = 10, epochs = 100)
 accuracies = cross_val_score(estimator = classifier, X = X_train, y = y_train, cv = 10)
+# when to run the jobs on all cores of the processor, but it will not work as processor may not allow to use all cores
+# accuracies = cross_val_score(estimator = classifier, X = X_train, y = y_train, cv = 10, n_jobs = -1)
 mean = accuracies.mean()
 variance = accuracies.std()
 
 # Improving the ANN
+# Dropout regulariaztion to reduce overfitting if needed
+# At each iteration some neurons of ANN are disabled randomly to prevent them from too dependent each other when they learn correlations
+# Therefore by overwriting these neurons, the ANN learns several independent correlations in the data because each time there is not the same configuration of the neurons
+# As neurons work more independtly, that prevents neurons larning too much that prevents over fitting 
+# import new class "from keras.layers import Dropout"
+# add this line classifier.add(Dropout(rate = 0.1)) for each layer
 
 # Tuning the ANN
+# parameter tuning, we have two types of parameters(weights and hyper parameters(no. of epochs))
+# we can tune it using gridsearch, it is same as implementing cross_val_score above
+from keras.wrappers.scikit_learn import KerasClassifier
+from sklearn.model_selection import GridSearchCV
+from keras.models import Sequential
+from keras.layers import Dense
+def build_classifier(optimizer):
+    classifier = Sequential()
+    classifier.add(Dense(units = 6, kernel_initializer = 'uniform', activation = 'relu', input_dim = 11))
+    classifier.add(Dense(units = 6, kernel_initializer = 'uniform', activation = 'relu'))
+    classifier.add(Dense(units = 1, kernel_initializer = 'uniform', activation = 'sigmoid'))
+    classifier.compile(optimizer = optimizer, loss = 'binary_crossentropy', metrics = ['accuracy'])
+    return classifier
+# as we have to tune the parameters, remove batch_size and epochs default values as they have to be tuned
+classifier = KerasClassifier(build_fn = build_classifier)
+# have to create dictionary that contains hyper parameters which have to be optimized
+# when we want to tune hyper parameters in the architecture such as units, loss, activation,optimizer, metrics; we have to generalize them
+# ** optimizer hyper parameter is already has default value 'adam' in previous implementation, as it is going to be tuned, optimizer has to be generalized not with tdefault value
+# to do that, pass hyper parameter to the function and replace it as argument compile() function
+# adam and rmsprop are stochastic gradient descent optimizers
+parameters = {'batch_size' : [25, 32],
+              'epochs' : [100, 500],
+              'optimizer' : ['adam', 'rmsprop']}
+grid_search = GridSearchCV(estimator = classifier,
+                           param_grid = parameters,
+                           scoring = 'accuracy',
+                           cv = 10)
+grid_search = grid_search.fit(X_train, y_train)
+best_parameters = grid_search.best_params_
+best_accuracy = grid_search.best_score_
+
+
